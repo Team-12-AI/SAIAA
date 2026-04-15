@@ -1,0 +1,180 @@
+# =============================================================================
+# LiteLLM Proxy Configuration
+# - Llama Guard 4 guardrail for prompt injection detection (pre-call)
+# - Complexity-based routing across 4 tiers: SIMPLE, MEDIUM, COMPLEX, REASONING
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Model List
+# ---------------------------------------------------------------------------
+# Define the target models for each complexity tier, plus the complexity
+# router itself and the Llama Guard safety model.
+
+model_list:
+
+  # --- Tier models (routed to by the complexity router) --------------------
+
+  - model_name: gpt-4o-mini                       # SIMPLE tier
+    litellm_params:
+      model: openrouter/openai/gpt-4o-mini
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  - model_name: gpt-4o                            # MEDIUM tier
+    litellm_params:
+      model: openrouter/openai/gpt-4o
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  - model_name: claude-sonnet                      # COMPLEX tier
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  - model_name: o1-preview                         # REASONING tier
+    litellm_params:
+      model: openrouter/openai/o1-preview
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  # --- Llama Guard model (used by the guardrail, not routed to directly) ---
+
+  - model_name: llama-guard
+    litellm_params:
+      model: openrouter/meta-llama/llama-guard-4-12b
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+
+  # --- Complexity router (public-facing model name) ------------------------
+
+  - model_name: smart-router
+    litellm_params:
+      model: auto_router/complexity_router
+
+      complexity_router_config:
+        # Map each complexity tier to one of the model_name entries above
+        tiers:
+          SIMPLE:    gpt-4o-mini
+          MEDIUM:    gpt-4o
+          COMPLEX:   claude-sonnet
+          REASONING: o1-preview
+
+        # Normalized-score boundaries between tiers
+        tier_boundaries:
+          simple_medium:     0.15   # score < 0.15  → SIMPLE
+          medium_complex:    0.35   # 0.15 – 0.35   → MEDIUM
+          complex_reasoning: 0.60   # 0.35 – 0.60   → COMPLEX
+                                    # score > 0.60  → REASONING
+
+        # Token-count thresholds that influence the complexity score
+        token_thresholds:
+          simple:  15              # prompts shorter than this skew SIMPLE
+          complex: 400             # prompts longer  than this skew COMPLEX
+
+        # Weight each scoring dimension (should sum to ~1.0)
+        dimension_weights:
+          tokenCount:         0.10
+          codePresence:       0.30
+          reasoningMarkers:   0.25
+          technicalTerms:     0.25
+          simpleIndicators:   0.05
+          multiStepPatterns:  0.03
+          questionComplexity: 0.02
+
+      # Fallback if the router cannot determine a tier
+      complexity_router_default_model: gpt-4o
+
+# ---------------------------------------------------------------------------
+# Guardrails
+# ---------------------------------------------------------------------------
+# Use a custom-code guardrail that calls the Llama Guard 4 12B model
+# before every LLM request to scan for prompt injection attacks.
+
+guardrails:
+  - guardrail_name: "llama-guard-prompt-injection"
+    litellm_params:
+      guardrail: custom_code
+      mode: "pre_call"
+      default_on: true                             # runs on every request
+      custom_code: |
+        async def apply_guardrail(inputs, request_data, input_type):
+            """
+            Calls meta-llama/llama-guard-4-12b to classify the user prompt.
+            Blocks the request when the model returns 'unsafe'.
+            """
+            # Build the conversation for Llama Guard
+            messages = []
+            for text in inputs["texts"]:
+                messages.append({"role": "user", "content": text})
+
+            payload = {
+                "model": "llama-guard",
+                "messages": messages,
+                "max_tokens": 100
+            }
+
+            # Call the Llama Guard model through the LiteLLM proxy itself
+            response = await http_post(
+                "http://localhost:4000/chat/completions",
+                body=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + get_secret("LITELLM_MASTER_KEY")
+                }
+            )
+
+            if not response["success"]:
+                # If the safety check itself fails, block out of caution
+                return block("Safety check unavailable — request blocked")
+
+            # Llama Guard returns "safe" or "unsafe\n<category>" in its output
+            guard_output = ""
+            body = response.get("body", {})
+            choices = body.get("choices", [])
+            if choices:
+                guard_output = choices[0].get("message", {}).get("content", "")
+
+            if "unsafe" in guard_output.lower():
+                return block(
+                    "Prompt injection detected by Llama Guard 4. "
+                    "Category: " + guard_output.strip()
+                )
+
+            return allow()
+
+# ---------------------------------------------------------------------------
+# Guardrail Policies  (optional — apply the guard globally)
+# ---------------------------------------------------------------------------
+policies:
+  safety-baseline:
+    guardrails:
+      add:
+        - llama-guard-prompt-injection
+
+policy_attachments:
+  - policy: safety-baseline
+    scope: "*"                                     # every request
+
+# ---------------------------------------------------------------------------
+# Router Settings
+# ---------------------------------------------------------------------------
+router_settings:
+  routing_strategy: simple-shuffle                 # load-balance within a tier
+  num_retries: 3
+  timeout: 120                                     # seconds
+  allowed_fails: 3                                 # cooldown after N failures
+  cooldown_time: 60                                # seconds before retry
+
+  # Cross-tier fallbacks if the primary tier model is unavailable
+  fallbacks:
+    - gpt-4o-mini: [gpt-4o]
+    - claude-sonnet: [gpt-4o]
+    - o1-preview: [claude-sonnet]
+
+# ---------------------------------------------------------------------------
+# General Settings
+# ---------------------------------------------------------------------------
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # database_url: os.environ/DATABASE_URL          # uncomment for persistent keys/spend tracking
