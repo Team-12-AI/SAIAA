@@ -1,0 +1,7 @@
+{
+  "name": "calc",
+  "transport": "stdio",
+  "description": "calculator mcp server",
+  "command": "npx",
+  "args": ["-y", "@wrtnlabs/calculator-mcp@latest"]
+}
