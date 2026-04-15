@@ -1,0 +1,26 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Set SSH Authorized Keys
+  hosts: localhost
+  gather_facts: true
+  become: false
+
+  vars:
+    github_users:
+      - hauptj
+      - jason-the-builder
+      - BMatze
+
+  tasks:
+  - name: Set authorized keys taken from Github profile url using lookup
+    ansible.posix.authorized_key:
+      user: ubuntu
+      state: present
+      key: "{{ lookup('url', 'https://github.com/{{ item }}.keys', split_lines=False) }}"
+    loop: "{{ github_users }}"
+
+  - name: Set authorized key taken from file
+    ansible.posix.authorized_key:
+      user: ubuntu
+      state: present
+      key: "{{ lookup('file', '/home/ubuntu/ansible/brock.pub') }}"

@@ -1,0 +1,42 @@
+#!/usr/bin/env ansible-playbook
+---
+- name: Install Docker on Ubuntu
+  hosts: localhost
+  gather_facts: true
+  become: true
+
+  vars:
+    pre_task_pkgs:
+      - make
+      - jq
+      - yq
+      - git
+      - openssl
+      - python3
+      - python3-pip
+
+    docker_users:
+      - ubuntu # Update with your Linux username
+     
+    docker_install_compose: true
+
+  pre_tasks:
+    - name: Install pre task packages
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ pre_task_pkgs }}"
+
+  roles:
+    - geerlingguy.docker
+    - robertdebock.fail2ban
+
+  post_tasks:
+    - name: Fix ownership and access permissions for .docker directory
+      ansible.builtin.file:
+        path: /home/ubuntu/.docker
+        recurse: yes
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: g+rwx

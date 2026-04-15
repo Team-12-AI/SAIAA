@@ -1,0 +1,6 @@
+---
+roles:
+  - name: geerlingguy.docker
+    version: 8.0.0
+  - name: robertdebock.fail2ban
+    version: 5.0.6
