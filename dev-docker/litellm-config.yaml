@@ -13,7 +13,7 @@
 model_list:
 
   # --- Tier models (routed to by the complexity router) --------------------
-
+  
   - model_name: gpt-4o-mini                       # SIMPLE tier
     litellm_params:
       model: openrouter/openai/gpt-4o-mini
@@ -44,7 +44,7 @@ model_list:
     litellm_params:
       model: openrouter/meta-llama/llama-guard-4-12b
       api_key: os.environ/OPENROUTER_API_KEY
-      api_base: https://openrouter.ai/api/v1
+      api_base: https://openrouter.ai/api/v1/chat/completions
 
   # --- Complexity router (public-facing model name) ------------------------
 
@@ -58,7 +58,7 @@ model_list:
           SIMPLE:    gpt-4o-mini
           MEDIUM:    gpt-4o
           COMPLEX:   claude-sonnet
-          REASONING: o1-preview
+          REASONING: o1-preview 
 
         # Normalized-score boundaries between tiers
         tier_boundaries:
@@ -109,18 +109,18 @@ guardrails:
                 messages.append({"role": "user", "content": text})
 
             payload = {
-                "model": "llama-guard",
+                "model": "meta-llama/llama-guard-4-12b",
                 "messages": messages,
                 "max_tokens": 100
             }
 
             # Call the Llama Guard model through the LiteLLM proxy itself
             response = await http_post(
-                "http://localhost:4000/chat/completions",
+                "https://openrouter.ai/api/v1/chat/completions",
                 body=payload,
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": "Bearer " + get_secret("LITELLM_MASTER_KEY")
+                    "Authorization": "Bearer " + "***REMOVED***"
                 }
             )
 
@@ -139,6 +139,7 @@ guardrails:
                 return block(
                     "Prompt injection detected by Llama Guard 4. "
                     "Category: " + guard_output.strip()
+                    #"Request body: " + 
                 )
 
             return allow()
@@ -161,16 +162,18 @@ policy_attachments:
 # ---------------------------------------------------------------------------
 router_settings:
   routing_strategy: simple-shuffle                 # load-balance within a tier
-  num_retries: 3
-  timeout: 120                                     # seconds
-  allowed_fails: 3                                 # cooldown after N failures
-  cooldown_time: 60                                # seconds before retry
-
-  # Cross-tier fallbacks if the primary tier model is unavailable
+  disable_cooldowns: True
+  #num_retries: 3
+  #timeout: 120                                     # seconds
+  #allowed_fails: 3                                 # cooldown after N failures
+  #cooldown_time: 60                                # seconds before retry
+  
+  # Cross-tier fallbacks if the primary tier model is unavailable 
   fallbacks:
     - gpt-4o-mini: [gpt-4o]
     - claude-sonnet: [gpt-4o]
     - o1-preview: [claude-sonnet]
+
 
 # ---------------------------------------------------------------------------
 # General Settings

@@ -26,7 +26,7 @@ services:
     
     environment:
       # Required: Your LLM provider API key
-      - API_KEY=${API_KEY:-}
+      # - API_KEY=${API_KEY:-}
       # - API_URL=http://litellm:4000/v1
       - API_URL=http://litellm:4000/v1
       # Or use the prefixed version:
@@ -117,7 +117,7 @@ services:
     volumes:
       - ./litellm-config.yaml:/app/config.yaml
     env_file: "litellm.env"
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "8"]
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "8", "--debug"]
 
 volumes:
   zeroclaw-data:
