@@ -13,7 +13,7 @@
 model_list:
 
   # --- Tier models (routed to by the complexity router) --------------------
-
+  
   - model_name: gpt-4o-mini                       # SIMPLE tier
     litellm_params:
       model: openrouter/openai/gpt-4o-mini
@@ -28,13 +28,13 @@ model_list:
 
   - model_name: claude-sonnet                      # COMPLEX tier
     litellm_params:
-      model: openrouter/anthropic/claude-sonnet-4-20250514
+      model: openrouter/anthropic/claude-sonnet-4.6
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
 
-  - model_name: o1-preview                         # REASONING tier
+  - model_name: claude-opus                         # REASONING tier
     litellm_params:
-      model: openrouter/openai/o1-preview
+      model: openrouter/anthropic/claude-opus-4.7
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
 
@@ -44,7 +44,7 @@ model_list:
     litellm_params:
       model: openrouter/meta-llama/llama-guard-4-12b
       api_key: os.environ/OPENROUTER_API_KEY
-      api_base: https://openrouter.ai/api/v1
+      api_base: https://openrouter.ai/api/v1/chat/completions
 
   # --- Complexity router (public-facing model name) ------------------------
 
@@ -58,7 +58,7 @@ model_list:
           SIMPLE:    gpt-4o-mini
           MEDIUM:    gpt-4o
           COMPLEX:   claude-sonnet
-          REASONING: o1-preview
+          REASONING: claude-opus
 
         # Normalized-score boundaries between tiers
         tier_boundaries:
@@ -92,56 +92,13 @@ model_list:
 # before every LLM request to scan for prompt injection attacks.
 
 guardrails:
-  - guardrail_name: "llama-guard-prompt-injection"
+  - guardrail_name: llama-guard-4-pre
     litellm_params:
-      guardrail: custom_code
-      mode: "pre_call"
-      default_on: true                             # runs on every request
-      custom_code: |
-        async def apply_guardrail(inputs, request_data, input_type):
-            """
-            Calls meta-llama/llama-guard-4-12b to classify the user prompt.
-            Blocks the request when the model returns 'unsafe'.
-            """
-            # Build the conversation for Llama Guard
-            messages = []
-            for text in inputs["texts"]:
-                messages.append({"role": "user", "content": text})
-
-            payload = {
-                "model": "llama-guard",
-                "messages": messages,
-                "max_tokens": 100
-            }
-
-            # Call the Llama Guard model through the LiteLLM proxy itself
-            response = await http_post(
-                "http://localhost:4000/chat/completions",
-                body=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + get_secret("LITELLM_MASTER_KEY")
-                }
-            )
-
-            if not response["success"]:
-                # If the safety check itself fails, block out of caution
-                return block("Safety check unavailable — request blocked")
-
-            # Llama Guard returns "safe" or "unsafe\n<category>" in its output
-            guard_output = ""
-            body = response.get("body", {})
-            choices = body.get("choices", [])
-            if choices:
-                guard_output = choices[0].get("message", {}).get("content", "")
-
-            if "unsafe" in guard_output.lower():
-                return block(
-                    "Prompt injection detected by Llama Guard 4. "
-                    "Category: " + guard_output.strip()
-                )
-
-            return allow()
+      guardrail: llama_guard_4
+      mode: pre_call
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+      default_on: true
 
 # ---------------------------------------------------------------------------
 # Guardrail Policies  (optional — apply the guard globally)
@@ -150,7 +107,7 @@ policies:
   safety-baseline:
     guardrails:
       add:
-        - llama-guard-prompt-injection
+        - llama-guard-4-pre
 
 policy_attachments:
   - policy: safety-baseline
@@ -161,16 +118,18 @@ policy_attachments:
 # ---------------------------------------------------------------------------
 router_settings:
   routing_strategy: simple-shuffle                 # load-balance within a tier
-  num_retries: 3
-  timeout: 120                                     # seconds
-  allowed_fails: 3                                 # cooldown after N failures
-  cooldown_time: 60                                # seconds before retry
-
-  # Cross-tier fallbacks if the primary tier model is unavailable
+  disable_cooldowns: True
+  #num_retries: 3
+  #timeout: 120                                     # seconds
+  #allowed_fails: 3                                 # cooldown after N failures
+  #cooldown_time: 60                                # seconds before retry
+  
+  # Cross-tier fallbacks if the primary tier model is unavailable 
   fallbacks:
     - gpt-4o-mini: [gpt-4o]
     - claude-sonnet: [gpt-4o]
-    - o1-preview: [claude-sonnet]
+    - claude-opus: [claude-sonnet]
+
 
 # ---------------------------------------------------------------------------
 # General Settings

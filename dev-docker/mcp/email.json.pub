@@ -1,0 +1,20 @@
+{
+  "name": "zerolib-email",
+  "transport": "stdio",
+  "command": "uvx",
+  "args": [
+    "mcp-email-server@latest",
+    "stdio"
+  ],
+  "env": {
+    "MCP_EMAIL_SERVER_ACCOUNT_NAME": "Joshua",
+    "MCP_EMAIL_SERVER_FULL_NAME": "Joshua Haupt",
+    "MCP_EMAIL_SERVER_EMAIL_ADDRESS": "redact@jnh.dev",
+    "MCP_EMAIL_SERVER_USER_NAME": "redact@jnh.dev",
+    "MCP_EMAIL_SERVER_PASSWORD": "redact",
+    "MCP_EMAIL_SERVER_IMAP_HOST": "mail.privateemail.com",
+    "MCP_EMAIL_SERVER_IMAP_PORT": "993",
+    "MCP_EMAIL_SERVER_SMTP_HOST": "mail.privateemail.com",
+    "MCP_EMAIL_SERVER_SMTP_PORT": "465"
+  }
+}
