@@ -1,0 +1,15 @@
+{
+  "name": "trello-applications",
+  "transport": "stdio",
+  "description": "trello applications mcp server",
+  "command": "npx",
+  "args": [
+    "-y",
+    "@Hint-Services/mcp-trello"
+  ],
+  "env": {
+    "trelloApiKey": "redact",
+    "trelloToken": "redact",
+    "trelloBoardId": "redact"
+  }
+}

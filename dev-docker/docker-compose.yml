@@ -95,13 +95,16 @@ services:
     environment:
       DATABASE_URL: postgres://mcpjungle:mcpjungle@db:5432/mcpjungle
       SERVER_MODE: ${SERVER_MODE:-development}
-      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
       MCP_SERVER_INIT_REQ_TIMEOUT_SEC: ${MCP_SERVER_INIT_REQ_TIMEOUT_SEC:-10}
+    post_start:
+      - command: ["chmod", "+x", "/hostmcp/register_servers.sh"]
+      - command: ["/hostmcp/register_servers.sh"]
     ports:
       - "${HOST_PORT:-8080}:8080"
     volumes:
       # Mount host filesystem current directory to enable filesystem MCP server access
-      - .:/host:ro
+      - ./mcp:/hostmcp
       # Other options:
       # - ${HOME}:/host/home:ro
       # - /tmp:/host/tmp:rw
@@ -111,7 +114,7 @@ services:
     restart: always
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: docker.io/hauptj/litellm:v1.83.9-llamaguard4-dev
     ports:
       - "4000:4000"
     volumes:
